@@ -2,6 +2,7 @@ body, html {
     margin: 0;
     padding: 0;
     height: 100%;
+    background-color: #1a1a1a;
 }
 
 #map {
@@ -11,3 +12,224 @@ body, html {
     width: 100%;
     height: 100%;
 }
+
+/* Species popup styling */
+.species-popup {
+    max-width: 320px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background-color: #2d2d2d;
+    color: #ffffff;
+}
+
+.popup-header {
+    margin-bottom: 12px;
+    border-bottom: 1px solid #444;
+    padding-bottom: 8px;
+}
+
+.popup-header h3 {
+    margin: 0 0 4px 0;
+    font-size: 16px;
+    color: #ffffff;
+}
+
+.location-info {
+    color: #bbbbbb;
+    font-size: 11px;
+}
+
+.species-list {
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.species-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid #444;
+}
+
+.species-item:last-child {
+    border-bottom: none;
+}
+
+.species-info {
+    flex: 1;
+    margin-right: 12px;
+}
+
+.species-name {
+    font-weight: 600;
+    color: #4fc3f7;
+    margin-bottom: 2px;
+}
+
+.species-code {
+    font-size: 12px;
+    color: #bbbbbb;
+    background: #444;
+    padding: 2px 6px;
+    border-radius: 3px;
+    display: inline-block;
+}
+
+.species-thumbnail {
+    flex-shrink: 0;
+}
+
+.species-thumbnail img {
+    border: 1px solid #555;
+    object-fit: cover;
+}
+
+.date-info {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid #444;
+    color: #bbbbbb;
+    font-size: 12px;
+}
+
+.species-popup-container .mapboxgl-popup-content {
+    padding: 15px;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.6);
+    background-color: #2d2d2d !important;
+    border: 1px solid #444;
+}
+
+/* Selection summary popup styling */
+.selection-summary {
+    max-width: 400px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background-color: #2d2d2d;
+    color: #ffffff;
+}
+
+.summary-header {
+    margin-bottom: 16px;
+    border-bottom: 2px solid #444;
+    padding-bottom: 12px;
+}
+
+.summary-header h3 {
+    margin: 0 0 8px 0;
+    font-size: 18px;
+    color: #ffffff;
+    font-weight: 600;
+}
+
+.summary-stats {
+    display: flex;
+    gap: 16px;
+}
+
+.stat-item {
+    background: #3a5f7a;
+    color: #ffffff;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.species-summary-list {
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.summary-species-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 0;
+    border-bottom: 1px solid #444;
+}
+
+.summary-species-item:last-child {
+    border-bottom: none;
+}
+
+.summary-species-info {
+    flex: 1;
+    margin-right: 12px;
+}
+
+.summary-species-name {
+    font-weight: 600;
+    color: #4fc3f7;
+    margin-bottom: 4px;
+    font-size: 14px;
+}
+
+.summary-species-details {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.summary-species-code {
+    font-size: 11px;
+    color: #bbbbbb;
+    background: #444;
+    padding: 2px 6px;
+    border-radius: 3px;
+}
+
+.summary-species-count {
+    font-size: 12px;
+    color: #4caf50;
+    font-weight: 500;
+}
+
+.summary-species-thumbnail {
+    flex-shrink: 0;
+}
+
+.summary-species-thumbnail img {
+    border: 1px solid #555;
+    border-radius: 4px;
+    object-fit: cover;
+}
+
+.selection-instructions {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid #444;
+    text-align: center;
+    color: #bbbbbb;
+}
+
+.selection-summary-popup .mapboxgl-popup-content {
+    padding: 20px;
+    border-radius: 10px;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.7);
+    max-width: 420px;
+    background-color: #2d2d2d !important;
+    border: 1px solid #444;
+}
+
+.selection-box {
+    z-index: 1000;
+}
+
+/* No data popup styling */
+.no-data-popup .mapboxgl-popup-content {
+    background-color: #2d2d2d !important;
+    border: 1px solid #444;
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.6);
+}
+
+/* Mapbox popup close button dark theme adjustments */
+.mapboxgl-popup-close-button {
+    color: #ffffff !important;
+    font-size: 20px !important;
+}
+
+.mapboxgl-popup-close-button:hover {
+    background-color: rgba(255,255,255,0.1) !important;
+}
+
