@@ -1,4 +1,4 @@
-const MAPBOX_ACCESS_TOKEN_PLACEHOLDER = ''
+const MAPBOX_ACCESS_TOKEN_PLACEHOLDER = 'pk.eyJ1Ijoid2lsbGNoaXMiLCJhIjoiY21pdWQ1eGRnMWY0ejNncHllOThoNW5zNiJ9.XDt9LhXqxkbW5JjIhkPY4A'
 // Set your Mapbox access token
 mapboxgl.accessToken = MAPBOX_ACCESS_TOKEN_PLACEHOLDER;
 
