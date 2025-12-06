@@ -14,37 +14,71 @@ const map = new mapboxgl.Map({
 map.on('load', () => {
     console.log('Map has successfully loaded and is ready for custom GeoJSON data');
     
-    // Add the GeoJSON data as a source
-    map.addSource('geojson-data', {
-        type: 'geojson',
-        data: './data/data.geojson'
-    });
-    
-    // Add a layer to display the GeoJSON data
-    map.addLayer({
-        id: 'geojson-layer',
-        type: 'fill',
-        source: 'geojson-data',
-        layout: {},
-        paint: {
-            'fill-color': '#088',
-            'fill-opacity': 0.8
-        }
-    });
-    
-    // Add a stroke/outline layer
-    map.addLayer({
-        id: 'geojson-outline',
-        type: 'line',
-        source: 'geojson-data',
-        layout: {},
-        paint: {
-            'line-color': '#000',
-            'line-width': 2
-        }
-    });
-    
-    console.log('GeoJSON data loaded successfully');
+    // Load GeoJSON data with proper error handling
+    fetch('./data/data.geojson')
+        .then(response => {
+            console.log('Fetch response status:', response.status, response.statusText);
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(geojsonData => {
+            console.log('GeoJSON data loaded:', geojsonData);
+            console.log('Number of features:', geojsonData.features ? geojsonData.features.length : 'No features property');
+            
+            // Add the GeoJSON data as a source
+            map.addSource('geojson-data', {
+                type: 'geojson',
+                data: geojsonData
+            });
+            
+            // Add a layer to display the GeoJSON points
+            map.addLayer({
+                id: 'geojson-layer',
+                type: 'circle',
+                source: 'geojson-data',
+                layout: {},
+                paint: {
+                    'circle-color': '#088',
+                    'circle-radius': 8,
+                    'circle-stroke-color': '#000',
+                    'circle-stroke-width': 2,
+                    'circle-opacity': 0.8
+                }
+            });
+            
+            console.log('Layers added successfully');
+            
+            // Fit map to data bounds if features exist
+            if (geojsonData.features && geojsonData.features.length > 0) {
+                const bounds = new mapboxgl.LngLatBounds();
+                geojsonData.features.forEach(feature => {
+                    if (feature.geometry.type === 'Point') {
+                        bounds.extend(feature.geometry.coordinates);
+                    } else if (feature.geometry.type === 'Polygon') {
+                        feature.geometry.coordinates[0].forEach(coord => bounds.extend(coord));
+                    } else if (feature.geometry.type === 'MultiPolygon') {
+                        feature.geometry.coordinates.forEach(polygon => {
+                            polygon[0].forEach(coord => bounds.extend(coord));
+                        });
+                    }
+                });
+                
+                if (!bounds.isEmpty()) {
+                    map.fitBounds(bounds, { padding: 50 });
+                    console.log('Map fitted to data bounds:', bounds.toArray());
+                } else {
+                    console.log('Bounds are empty, keeping current view');
+                }
+            } else {
+                console.log('No features found to fit bounds to');
+            }
+        })
+        .catch(error => {
+            console.error('Error loading GeoJSON data:', error);
+            console.error('Make sure you\'re running this from a web server (not file://) and the data file exists');
+        });
     
     // Add hover effect
     map.on('mouseenter', 'geojson-layer', () => {
@@ -77,5 +111,26 @@ map.on('load', () => {
             .setLngLat(e.lngLat)
             .setHTML(popupContent)
             .addTo(map);
+        });
+    
+    // Add error handlers for debugging
+    map.on('error', (e) => {
+        console.error('Map error:', e);
+    });
+    
+    map.on('sourcedata', (e) => {
+        if (e.sourceId === 'geojson-data' && e.isSourceLoaded) {
+            console.log('Source data loaded for geojson-data');
+            const source = map.getSource('geojson-data');
+            if (source && source._data) {
+                console.log('Source data available:', source._data);
+            }
+        }
+    });
+    
+    map.on('sourcedataloading', (e) => {
+        if (e.sourceId === 'geojson-data') {
+            console.log('Loading source data for geojson-data');
+        }
     });
 });
