@@ -1,8 +1,25 @@
 const MAPBOX_ACCESS_TOKEN_PLACEHOLDER = 'pk.eyJ1Ijoid2lsbGNoaXMiLCJhIjoiY21pdWY2dDIzMXdybjNrb3Z4ZnpldW94YSJ9.DsafjLG-L13IoDJb6N5SaQ'
-// Set your Mapbox access token
+const CLUSTER_MAX_ZOOM = 12;
+const CLUSTER_RADIUS = 50;
+// Color Constants
+const COLORS = {
+    LIGHT_BLUE: '#4fc3f7',
+    YELLOW: '#ffeb3b', 
+    ORANGE_RED: '#ff5722',
+    WHITE: '#ffffff',
+    BLACK: '#000000',
+    TEAL: '#00acc1',
+    LIGHT_GRAY: '#ddd',
+    VERY_LIGHT_GRAY: '#f0f0f0',
+    DARK_GRAY: '#333',
+    DARKER_GRAY: '#2d2d2d',
+    SELECTION_BLUE: 'rgba(79, 195, 247, 0.2)',
+    SEMI_WHITE: 'rgba(255, 255, 255, 0.9)',
+    SEMI_BLACK: 'rgba(0,0,0,0.1)'
+};
+
 mapboxgl.accessToken = MAPBOX_ACCESS_TOKEN_PLACEHOLDER;
 
-// Function to lazy load thumbnails
 function loadThumbnail(thumbnailId) {
     const img = document.getElementById(thumbnailId);
     if (img && img.dataset.src) {
@@ -15,17 +32,13 @@ function loadThumbnail(thumbnailId) {
             };
             tempImg.onerror = function() {
                 img.alt = 'Image not available';
-                img.style.background = '#ddd';
+                img.style.background = COLORS.LIGHT_GRAY;
             };
             tempImg.src = actualSrc;
         }
     }
 }
 
-// Make loadThumbnail globally available
-window.loadThumbnail = loadThumbnail;
-
-// Initialize the map
 const map = new mapboxgl.Map({
     container: 'map',
     style: 'mapbox://styles/mapbox/dark-v11',
@@ -34,149 +47,313 @@ const map = new mapboxgl.Map({
 });
 
 
-// Add GeoJSON data when map loads
-map.on('load', () => {
-    console.log('Map has successfully loaded and is ready for custom GeoJSON data');
+async function loadAndFilterGeoData() {
+    const response = await fetch('./data/data.geojson');
+    console.log('Fetch response status:', response.status, response.statusText);
+    if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+    }
     
-    // Load GeoJSON data with proper error handling
-    fetch('./data/data.geojson')
-        .then(response => {
-            console.log('Fetch response status:', response.status, response.statusText);
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            return response.json();
-        })
-        .then(geojsonData => {
-            console.log('GeoJSON data loaded:', geojsonData);
-            console.log('Number of features:', geojsonData.features ? geojsonData.features.length : 'No features property');
-            
-            // Filter to only show features with species_colonies
-            const filteredData = {
-                ...geojsonData,
-                features: geojsonData.features.filter(feature => {
-                    const colonies = feature.properties.species_colonies;
-                    // Handle both array and string cases during filtering
-                    if (Array.isArray(colonies)) {
-                        return colonies.length > 0;
-                    } else if (typeof colonies === 'string') {
-                        try {
-                            const parsed = JSON.parse(colonies);
-                            return Array.isArray(parsed) && parsed.length > 0;
-                        } catch (e) {
-                            return false;
-                        }
-                    }
+    const geojsonData = await response.json();
+    console.log('GeoJSON data loaded:', geojsonData);
+    console.log('Number of features:', geojsonData.features ? geojsonData.features.length : 'No features property');
+    
+    const filteredData = {
+        ...geojsonData,
+        features: geojsonData.features.filter(feature => {
+            const colonies = feature.properties.species_colonies;
+            if (Array.isArray(colonies)) {
+                return colonies.length > 0;
+            } else if (typeof colonies === 'string') {
+                try {
+                    const parsed = JSON.parse(colonies);
+                    return Array.isArray(parsed) && parsed.length > 0;
+                } catch (e) {
                     return false;
-                })
-            };
-            
-            console.log('Filtered features with species_colonies:', filteredData.features.length);
-            
-            // Add the filtered GeoJSON data as a source with clustering enabled
-            map.addSource('geojson-data', {
-                type: 'geojson',
-                data: filteredData,
-                cluster: true,
-                clusterMaxZoom: 14, // Max zoom to cluster points on
-                clusterRadius: 50 // Radius of each cluster when clustering points (defaults to 50)
-            });
-            
-            // Add cluster layer
-            map.addLayer({
-                id: 'clusters',
-                type: 'circle',
-                source: 'geojson-data',
-                filter: ['has', 'point_count'],
-                paint: {
-                    'circle-color': [
-                        'step',
-                        ['get', 'point_count'],
-                        '#4fc3f7',
-                        100,
-                        '#ffeb3b',
-                        750,
-                        '#ff5722'
-                    ],
-                    'circle-radius': [
-                        'step',
-                        ['get', 'point_count'],
-                        20,
-                        100,
-                        30,
-                        750,
-                        40
-                    ],
-                    'circle-stroke-width': 2,
-                    'circle-stroke-color': '#ffffff'
                 }
-            });
-
-            // Add cluster count labels
-            map.addLayer({
-                id: 'cluster-count',
-                type: 'symbol',
-                source: 'geojson-data',
-                filter: ['has', 'point_count'],
-                layout: {
-                    'text-field': '{point_count_abbreviated}',
-                    'text-font': ['DIN Offc Pro Medium', 'Arial Unicode MS Bold'],
-                    'text-size': 12
-                },
-                paint: {
-                    'text-color': '#000000',
-                    'text-halo-color': '#ffffff',
-                    'text-halo-width': 1
-                }
-            });
-
-            // Add unclustered points layer
-            map.addLayer({
-                id: 'unclustered-point',
-                type: 'circle',
-                source: 'geojson-data',
-                filter: ['!', ['has', 'point_count']],
-                paint: {
-                    'circle-color': '#00acc1',
-                    'circle-radius': 8,
-                    'circle-stroke-width': 2,
-                    'circle-stroke-color': '#ffffff'
-                }
-            });
-            
-            console.log('Layers added successfully');
-            
-            // Fit map to data bounds if features exist
-            if (filteredData.features && filteredData.features.length > 0) {
-                const bounds = new mapboxgl.LngLatBounds();
-                filteredData.features.forEach(feature => {
-                    if (feature.geometry.type === 'Point') {
-                        bounds.extend(feature.geometry.coordinates);
-                    } else if (feature.geometry.type === 'Polygon') {
-                        feature.geometry.coordinates[0].forEach(coord => bounds.extend(coord));
-                    } else if (feature.geometry.type === 'MultiPolygon') {
-                        feature.geometry.coordinates.forEach(polygon => {
-                            polygon[0].forEach(coord => bounds.extend(coord));
-                        });
-                    }
-                });
-                
-                if (!bounds.isEmpty()) {
-                    map.fitBounds(bounds, { padding: 50 });
-                    console.log('Map fitted to data bounds:', bounds.toArray());
-                } else {
-                    console.log('Bounds are empty, keeping current view');
-                }
-            } else {
-                console.log('No features found to fit bounds to');
             }
+            return false;
         })
-        .catch(error => {
-            console.error('Error loading GeoJSON data:', error);
-            console.error('Make sure you\'re running this from a web server (not file://) and the data file exists');
-        });
+    };
     
-    // Add hover effects for clusters
+    console.log('Filtered features with species_colonies:', filteredData.features.length);
+    return filteredData;
+}
+
+function createMapLayers(data) {
+    map.addSource('geojson-data', {
+        type: 'geojson',
+        data: data,
+        cluster: true,
+        clusterMaxZoom: CLUSTER_MAX_ZOOM,
+        clusterRadius: CLUSTER_RADIUS
+    });
+    
+    map.addLayer({
+        id: 'clusters',
+        type: 'circle',
+        source: 'geojson-data',
+        filter: ['has', 'point_count'],
+        paint: {
+            'circle-color': [
+                'step',
+                ['get', 'point_count'],
+                COLORS.LIGHT_BLUE,
+                100,
+                COLORS.YELLOW,
+                750,
+                COLORS.ORANGE_RED
+            ],
+            'circle-radius': [
+                'step',
+                ['get', 'point_count'],
+                20,
+                100,
+                30,
+                750,
+                40
+            ],
+            'circle-stroke-width': 2,
+            'circle-stroke-color': COLORS.WHITE
+        }
+    });
+
+    map.addLayer({
+        id: 'cluster-count',
+        type: 'symbol',
+        source: 'geojson-data',
+        filter: ['has', 'point_count'],
+        layout: {
+            'text-field': '{point_count_abbreviated}',
+            'text-font': ['DIN Offc Pro Medium', 'Arial Unicode MS Bold'],
+            'text-size': 12
+        },
+        paint: {
+            'text-color': COLORS.BLACK,
+            'text-halo-color': COLORS.WHITE,
+            'text-halo-width': 1
+        }
+    });
+
+    map.addLayer({
+        id: 'unclustered-point',
+        type: 'circle',
+        source: 'geojson-data',
+        filter: ['!', ['has', 'point_count']],
+        paint: {
+            'circle-color': COLORS.TEAL,
+            'circle-radius': 8,
+            'circle-stroke-width': 2,
+            'circle-stroke-color': COLORS.WHITE
+        }
+    });
+    
+    console.log('Layers added successfully');
+}
+
+function fitMapToBounds(data) {
+    if (!data.features || data.features.length === 0) {
+        console.log('No features found to fit bounds to');
+        return;
+    }
+    
+    const bounds = new mapboxgl.LngLatBounds();
+    data.features.forEach(feature => {
+        if (feature.geometry.type === 'Point') {
+            bounds.extend(feature.geometry.coordinates);
+        } else if (feature.geometry.type === 'Polygon') {
+            feature.geometry.coordinates[0].forEach(coord => bounds.extend(coord));
+        } else if (feature.geometry.type === 'MultiPolygon') {
+            feature.geometry.coordinates.forEach(polygon => {
+                polygon[0].forEach(coord => bounds.extend(coord));
+            });
+        }
+    });
+    
+    if (!bounds.isEmpty()) {
+        map.fitBounds(bounds, { padding: 50 });
+        console.log('Map fitted to data bounds:', bounds.toArray());
+    } else {
+        console.log('Bounds are empty, keeping current view');
+    }
+}
+
+function generateCSV(speciesData, type = 'individual', locationInfo = {}) {
+    const headers = ['Species Name', 'Species Code', 'Count', 'Longitude', 'Latitude', 'Date'];
+    const rows = [];
+    
+    if (type === 'individual') {
+        speciesData.forEach(species => {
+            rows.push([
+                species.SpeciesName || 'Unknown',
+                species.SpeciesCode || 'N/A',
+                '1',
+                locationInfo.longitude || 'N/A',
+                locationInfo.latitude || 'N/A',
+                locationInfo.date || 'N/A'
+            ]);
+        });
+    } else if (type === 'summary') {
+        if (Array.isArray(speciesData)) {
+            // Group species by name, code, and location
+            const groupedData = {};
+            
+            speciesData.forEach(species => {
+                const name = species.SpeciesName || 'Unknown';
+                const code = species.SpeciesCode || 'N/A';
+                const lng = species._longitude?.toFixed(6) || 'N/A';
+                const lat = species._latitude?.toFixed(6) || 'N/A';
+                const date = species._observationDate || 'N/A';
+                
+                // Create a unique key for species + location combination
+                const key = `${name}|${code}|${lng}|${lat}`;
+                
+                if (!groupedData[key]) {
+                    groupedData[key] = {
+                        name: name,
+                        code: code,
+                        longitude: lng,
+                        latitude: lat,
+                        count: 0,
+                        dates: new Set()
+                    };
+                }
+                
+                groupedData[key].count++;
+                if (date !== 'N/A') {
+                    groupedData[key].dates.add(date);
+                }
+            });
+            
+            // Convert grouped data to CSV rows
+            Object.values(groupedData).forEach(group => {
+                const datesArray = Array.from(group.dates);
+                let dateRange;
+                
+                if (datesArray.length === 0) {
+                    dateRange = 'N/A';
+                } else if (datesArray.length === 1) {
+                    dateRange = datesArray[0];
+                } else {
+                    const sortedDates = datesArray.sort();
+                    dateRange = `${sortedDates[0]} to ${sortedDates[sortedDates.length - 1]}`;
+                }
+                
+                rows.push([
+                    group.name,
+                    group.code,
+                    group.count.toString(),
+                    group.longitude,
+                    group.latitude,
+                    dateRange
+                ]);
+            });
+        } else {
+            // Fallback for aggregated data (should not be used anymore)
+            Object.values(speciesData).forEach(species => {
+                rows.push([
+                    species.name || 'Unknown',
+                    species.code || 'N/A',
+                    species.count.toString(),
+                    'Selected Area',
+                    '',
+                    species.dateRange || 'Multiple dates'
+                ]);
+            });
+        }
+    }
+    
+    const csvContent = [headers, ...rows]
+        .map(row => row.map(field => `"${field}"`).join(','))
+        .join('\n');
+    
+    return csvContent;
+}
+
+function downloadCSV(csvContent, filename) {
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    
+    if (link.download !== undefined) {
+        const url = URL.createObjectURL(blob);
+        link.setAttribute('href', url);
+        link.setAttribute('download', filename);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+}
+
+function downloadLocationCSV(speciesData, longitude, latitude, date) {
+    const csvContent = generateCSV(speciesData, 'individual', { longitude, latitude, date });
+    const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+    downloadCSV(csvContent, `species-location-${timestamp}.csv`);
+}
+
+function downloadSummaryCSV(speciesData, bounds) {
+    const csvContent = generateCSV(speciesData, 'summary', { bounds });
+    const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+    downloadCSV(csvContent, `species-summary-${timestamp}.csv`);
+}
+
+function createSpeciesPopupContent(properties) {
+    const speciesColonies = Array.isArray(properties.species_colonies) 
+        ? properties.species_colonies 
+        : (properties.species_colonies ? JSON.parse(properties.species_colonies) : []);
+    
+    let popupContent = `
+        <div class="species-popup">
+            <div class="popup-header">
+                <div class="header-top">
+                    <h3>Species Found</h3>
+                    <button class="csv-download-btn" onclick="downloadLocationCSV(${JSON.stringify(speciesColonies).replace(/"/g, '&quot;')}, ${properties.longitude}, ${properties.latitude}, '${properties.Date || 'N/A'}')" title="Download CSV">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z"/>
+                            <path d="M12,11L16,15H13V19H11V15H8L12,11Z"/>
+                        </svg>
+                        CSV
+                    </button>
+                </div>
+                <div class="location-info">
+                    <small>Location: ${properties.longitude?.toFixed(4)}, ${properties.latitude?.toFixed(4)}</small>
+                </div>
+            </div>
+            <div class="species-list">
+    `;
+    
+    speciesColonies.forEach((species, index) => {
+        const thumbnailId = `thumbnail-${Date.now()}-${index}`;
+        popupContent += `
+            <div class="species-item">
+                <div class="species-info">
+                    <div class="species-name">${species.SpeciesName || 'Unknown'}</div>
+                    <div class="species-code">Code: ${species.SpeciesCode || 'N/A'}</div>
+                </div>
+                <div class="species-thumbnail">
+                    <img id="${thumbnailId}" 
+                         src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNDAiIHZpZXdCb3g9IjAgMCA2MCA0MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjYwIiBoZWlnaHQ9IjQwIiBmaWxsPSIjZjBmMGYwIi8+CjxwYXRoIGQ9Im0zMCAyMCA2IDZoLTEybDYtNnoiIGZpbGw9IiNjY2MiLz4KPC9zdmc+" 
+                         alt="Loading..." 
+                         width="60" 
+                         height="40"
+                             style="background: ${COLORS.VERY_LIGHT_GRAY}; border-radius: 4px;"
+                         data-src="${species.bird_info?.bird_thumbnail || ''}"
+                         onload="loadThumbnail('${thumbnailId}')" />
+                </div>
+            </div>
+        `;
+    });
+    
+    popupContent += `
+            </div>
+            ${properties.Date ? `<div class="date-info"><small>Date: ${properties.Date}</small></div>` : ''}
+        </div>
+    `;
+    
+    return popupContent;
+}
+
+function setupEventHandlers() {
     map.on('mouseenter', 'clusters', () => {
         map.getCanvas().style.cursor = 'pointer';
     });
@@ -185,7 +362,6 @@ map.on('load', () => {
         map.getCanvas().style.cursor = '';
     });
     
-    // Add hover effects for unclustered points
     map.on('mouseenter', 'unclustered-point', () => {
         map.getCanvas().style.cursor = 'pointer';
     });
@@ -194,7 +370,6 @@ map.on('load', () => {
         map.getCanvas().style.cursor = '';
     });
     
-    // Cluster click event - expand clusters
     map.on('click', 'clusters', (e) => {
         const features = e.features[0];
         const clusterId = features.properties.cluster_id;
@@ -210,7 +385,6 @@ map.on('load', () => {
         });
     });
     
-    // Add click event for individual points popups
     map.on('click', 'unclustered-point', (e) => {
         if (!e.features || e.features.length === 0) {
             return;
@@ -219,53 +393,10 @@ map.on('load', () => {
         const features = e.features[0];
         const properties = features.properties;
         
-        // Debug: Check if species_colonies is already an array or needs parsing
         console.log('species_colonies type:', typeof properties.species_colonies);
         console.log('species_colonies value:', properties.species_colonies);
         
-        const speciesColonies = Array.isArray(properties.species_colonies) 
-            ? properties.species_colonies 
-            : (properties.species_colonies ? JSON.parse(properties.species_colonies) : []);
-        
-        // Create popup content focused on species information
-        let popupContent = `
-            <div class="species-popup">
-                <div class="popup-header">
-                    <h3>Species Found</h3>
-                    <div class="location-info">
-                        <small>Location: ${properties.longitude?.toFixed(4)}, ${properties.latitude?.toFixed(4)}</small>
-                    </div>
-                </div>
-                <div class="species-list">
-        `;
-        
-        speciesColonies.forEach((species, index) => {
-            const thumbnailId = `thumbnail-${Date.now()}-${index}`;
-            popupContent += `
-                <div class="species-item">
-                    <div class="species-info">
-                        <div class="species-name">${species.SpeciesName || 'Unknown'}</div>
-                        <div class="species-code">Code: ${species.SpeciesCode || 'N/A'}</div>
-                    </div>
-                    <div class="species-thumbnail">
-                        <img id="${thumbnailId}" 
-                             src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNDAiIHZpZXdCb3g9IjAgMCA2MCA0MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjYwIiBoZWlnaHQ9IjQwIiBmaWxsPSIjZjBmMGYwIi8+CjxwYXRoIGQ9Im0zMCAyMCA2IDZoLTEybDYtNnoiIGZpbGw9IiNjY2MiLz4KPC9zdmc+" 
-                             alt="Loading..." 
-                             width="60" 
-                             height="40"
-                             style="background: #f0f0f0; border-radius: 4px;"
-                             data-src="${species.bird_info?.bird_thumbnail || ''}"
-                             onload="loadThumbnail('${thumbnailId}')" />
-                    </div>
-                </div>
-            `;
-        });
-        
-        popupContent += `
-                </div>
-                ${properties.Date ? `<div class="date-info"><small>Date: ${properties.Date}</small></div>` : ''}
-            </div>
-        `;
+        const popupContent = createSpeciesPopupContent(properties);
         
         new mapboxgl.Popup({ className: 'species-popup-container' })
             .setLngLat(e.lngLat)
@@ -273,7 +404,6 @@ map.on('load', () => {
             .addTo(map);
     });
     
-    // Add error handlers for debugging
     map.on('error', (e) => {
         console.error('Map error:', e);
     });
@@ -293,41 +423,38 @@ map.on('load', () => {
             console.log('Loading source data for geojson-data');
         }
     });
+}
 
-    // Rectangle selection functionality
+function setupRectangleSelection() {
     let isDrawing = false;
     let startPoint = null;
     let startLngLat = null;
+    let shiftPressed = false;
 
-    // Create a canvas element for drawing the selection rectangle
     const canvas = map.getCanvasContainer();
     const selectionBox = document.createElement('div');
     selectionBox.classList.add('selection-box');
     selectionBox.style.position = 'absolute';
-    selectionBox.style.border = '2px dashed #4fc3f7';
-    selectionBox.style.backgroundColor = 'rgba(79, 195, 247, 0.2)';
+    selectionBox.style.border = `2px dashed ${COLORS.LIGHT_BLUE}`;
+    selectionBox.style.backgroundColor = COLORS.SELECTION_BLUE;
     selectionBox.style.display = 'none';
     selectionBox.style.pointerEvents = 'none';
     canvas.appendChild(selectionBox);
 
-    // Add selection mode indicator
     const selectionIndicator = document.createElement('div');
     selectionIndicator.innerHTML = 'Hold Shift + Drag to select area';
     selectionIndicator.style.position = 'absolute';
     selectionIndicator.style.top = '10px';
     selectionIndicator.style.left = '10px';
-    selectionIndicator.style.background = 'rgba(255, 255, 255, 0.9)';
-    selectionIndicator.style.color = '#333';
+    selectionIndicator.style.background = COLORS.SEMI_WHITE;
+    selectionIndicator.style.color = COLORS.DARK_GRAY;
     selectionIndicator.style.padding = '8px 12px';
     selectionIndicator.style.borderRadius = '6px';
     selectionIndicator.style.fontSize = '12px';
     selectionIndicator.style.zIndex = '1000';
-    selectionIndicator.style.border = '1px solid rgba(0,0,0,0.1)';
+    selectionIndicator.style.border = `1px solid ${COLORS.SEMI_BLACK}`;
     canvas.appendChild(selectionIndicator);
 
-    // Track shift key state
-    let shiftPressed = false;
-    
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Shift') {
             shiftPressed = true;
@@ -339,7 +466,6 @@ map.on('load', () => {
         if (e.key === 'Shift') {
             shiftPressed = false;
             map.getCanvas().style.cursor = '';
-            // Cancel any ongoing selection
             if (isDrawing) {
                 isDrawing = false;
                 selectionBox.style.display = 'none';
@@ -350,22 +476,18 @@ map.on('load', () => {
         }
     });
 
-    // Use Mapbox mouse events
     map.on('mousedown', (e) => {
         if (!shiftPressed) return;
         
-        // Prevent default map behavior
         e.preventDefault();
         isDrawing = true;
         startPoint = e.point;
         startLngLat = e.lngLat;
         
-        // Disable map interactions
         map.dragPan.disable();
         map.scrollZoom.disable();
         map.doubleClickZoom.disable();
         
-        // Show selection box
         selectionBox.style.left = startPoint.x + 'px';
         selectionBox.style.top = startPoint.y + 'px';
         selectionBox.style.width = '0px';
@@ -396,27 +518,22 @@ map.on('load', () => {
         const endPoint = e.point;
         const endLngLat = e.lngLat;
         
-        // Hide selection box
         selectionBox.style.display = 'none';
         
-        // Re-enable map interactions
         map.dragPan.enable();
         map.scrollZoom.enable();
         map.doubleClickZoom.enable();
         
-        // Check minimum selection size
         const minSize = 5;
         if (Math.abs(endPoint.x - startPoint.x) < minSize || Math.abs(endPoint.y - startPoint.y) < minSize) {
-            return; // Selection too small
+            return;
         }
         
-        // Create bounding box
         const bounds = [
             [Math.min(startLngLat.lng, endLngLat.lng), Math.min(startLngLat.lat, endLngLat.lat)],
             [Math.max(startLngLat.lng, endLngLat.lng), Math.max(startLngLat.lat, endLngLat.lat)]
         ];
         
-        // Query features within the selection rectangle
         const features = map.queryRenderedFeatures([
             [Math.min(startPoint.x, endPoint.x), Math.min(startPoint.y, endPoint.y)],
             [Math.max(startPoint.x, endPoint.x), Math.max(startPoint.y, endPoint.y)]
@@ -429,16 +546,31 @@ map.on('load', () => {
         if (features.length > 0) {
             processSelectedFeatures(features, bounds);
         } else {
-            // Show message if no features found
             new mapboxgl.Popup({ className: 'no-data-popup' })
                 .setLngLat([(startLngLat.lng + endLngLat.lng) / 2, (startLngLat.lat + endLngLat.lat) / 2])
-                .setHTML('<div style="padding: 10px; text-align: center; background-color: #2d2d2d; color: #ffffff; border-radius: 6px;">No species data found in selection</div>')
+                .setHTML(`<div style="padding: 10px; text-align: center; background-color: ${COLORS.DARKER_GRAY}; color: ${COLORS.WHITE}; border-radius: 6px;">No species data found in selection</div>`)
                 .addTo(map);
         }
     });
+}
 
-    // Function to process selected features and show species summary
-    async function processSelectedFeatures(features, bounds) {
+// Add GeoJSON data when map loads
+map.on('load', async () => {
+    console.log('Map has successfully loaded and is ready for custom GeoJSON data');
+    
+    try {
+        const filteredData = await loadAndFilterGeoData();
+        createMapLayers(filteredData);
+        fitMapToBounds(filteredData);
+        setupEventHandlers();
+        setupRectangleSelection();
+    } catch (error) {
+        console.error('Error loading GeoJSON data:', error);
+        console.error('Make sure you\'re running this from a web server (not file://) and the data file exists');
+    }
+});
+
+async function processSelectedFeatures(features, bounds) {
         let allSpecies = [];
         let processedPointIds = new Set(); // Track processed points to avoid duplicates
         let totalPoints = 0;
@@ -479,6 +611,18 @@ map.on('load', () => {
                         } else {
                             species = clusterFeature.properties.species_colonies;
                         }
+                        
+                        // Attach observation metadata to each species
+                        const observationDate = clusterFeature.properties.Date || 'N/A';
+                        const longitude = clusterFeature.geometry.coordinates[0];
+                        const latitude = clusterFeature.geometry.coordinates[1];
+                        
+                        species.forEach(s => {
+                            s._observationDate = observationDate;
+                            s._longitude = longitude;
+                            s._latitude = latitude;
+                        });
+                        
                         console.log(`Added ${species.length} species from cluster point ${pointId}`);
                         allSpecies.push(...species);
                     }
@@ -502,6 +646,18 @@ map.on('load', () => {
                 } else {
                     species = feature.properties.species_colonies;
                 }
+                
+                // Attach observation metadata to each species
+                const observationDate = feature.properties.Date || 'N/A';
+                const longitude = feature.geometry.coordinates[0];
+                const latitude = feature.geometry.coordinates[1];
+                
+                species.forEach(s => {
+                    s._observationDate = observationDate;
+                    s._longitude = longitude;
+                    s._latitude = latitude;
+                });
+                
                 console.log(`Added ${species.length} species from individual point ${pointId}`);
                 allSpecies.push(...species);
             } else if (processedPointIds.has(pointId)) {
@@ -511,37 +667,67 @@ map.on('load', () => {
         
         console.log(`Final count: ${totalPoints} unique locations with ${allSpecies.length} total species observations`);
         
-        // Aggregate species counts
+        // Aggregate species counts and dates for display
         const speciesCounts = {};
         allSpecies.forEach(species => {
             const name = species.SpeciesName || 'Unknown';
             const code = species.SpeciesCode || 'N/A';
             const key = `${name} (${code})`;
+            const observationDate = species._observationDate || 'N/A';
             
             if (!speciesCounts[key]) {
                 speciesCounts[key] = {
                     name: name,
                     code: code,
                     count: 0,
-                    thumbnail: species.bird_info?.bird_thumbnail
+                    thumbnail: species.bird_info?.bird_thumbnail,
+                    dates: new Set()
                 };
             }
             speciesCounts[key].count++;
+            if (observationDate !== 'N/A') {
+                speciesCounts[key].dates.add(observationDate);
+            }
         });
         
-        // Show summary popup
-        showSpeciesSummary(speciesCounts, totalPoints, bounds);
-    }
+        // Convert dates Set to readable format
+        Object.values(speciesCounts).forEach(species => {
+            const datesArray = Array.from(species.dates);
+            if (datesArray.length === 0) {
+                species.dateRange = 'No date available';
+            } else if (datesArray.length === 1) {
+                species.dateRange = datesArray[0];
+            } else {
+                // Sort dates and create range
+                const sortedDates = datesArray.sort();
+                species.dateRange = `${sortedDates[0]} to ${sortedDates[sortedDates.length - 1]} (${datesArray.length} dates)`;
+            }
+            delete species.dates; // Remove Set object before passing to JSON
+        });
+        
+        showSpeciesSummary(speciesCounts, totalPoints, bounds, allSpecies);
+}
 
-    // Function to show species summary popup
-    function showSpeciesSummary(speciesCounts, totalPoints, bounds) {
+function showSpeciesSummary(speciesCounts, totalPoints, bounds, allSpecies) {
         const centerLng = (bounds[0][0] + bounds[1][0]) / 2;
         const centerLat = (bounds[0][1] + bounds[1][1]) / 2;
+        
+        // Store individual species data globally for CSV download
+        window.selectedSpeciesData = allSpecies;
         
         let popupContent = `
             <div class="selection-summary">
                 <div class="summary-header">
-                    <h3>Selection Summary</h3>
+                    <div class="header-top">
+                        <h3>Selection Summary</h3>
+                        <button class="csv-download-btn" onclick="downloadSummaryCSV(window.selectedSpeciesData, '${bounds}')" title="Download CSV">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z"/>
+                                <path d="M12,11L16,15H13V19H11V15H8L12,11Z"/>
+                            </svg>
+                            CSV
+                        </button>
+                    </div>
                     <div class="summary-stats">
                         <span class="stat-item">${totalPoints} locations selected</span>
                         <span class="stat-item">${Object.keys(speciesCounts).length} unique species</span>
@@ -594,6 +780,4 @@ map.on('load', () => {
             .setLngLat([centerLng, centerLat])
             .setHTML(popupContent)
             .addTo(map);
-    }
-});
-
+}
