@@ -355,3 +355,49 @@ body, html {
     background-color: rgba(255,255,255,0.1) !important;
 }
 
+.map-mode-toggle {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    z-index: 1000;
+    background-color: rgba(255, 255, 255, 0.95);
+    border-radius: 8px;
+    padding: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    cursor: pointer;
+    transition: all 0.3s ease;
+    border: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.map-mode-toggle:hover {
+    background-color: rgba(255, 255, 255, 1);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    transform: scale(1.05);
+}
+
+.map-mode-toggle.heatmap-active {
+    background-color: rgba(45, 45, 45, 0.95);
+}
+
+.map-mode-toggle.heatmap-active:hover {
+    background-color: rgba(45, 45, 45, 1);
+}
+
+.toggle-icon {
+    width: 28px;
+    height: 28px;
+    color: #333;
+    transition: all 0.3s ease;
+}
+
+.map-mode-toggle.heatmap-active .toggle-icon {
+    color: #4fc3f7;
+}
+
+.map-mode-toggle:hover .toggle-icon {
+    color: #ff5722;
+}
+

@@ -1,6 +1,8 @@
 const MAPBOX_ACCESS_TOKEN_PLACEHOLDER = 'pk.eyJ1Ijoid2lsbGNoaXMiLCJhIjoiY21pdWY2dDIzMXdybjNrb3Z4ZnpldW94YSJ9.DsafjLG-L13IoDJb6N5SaQ'
 const CLUSTER_MAX_ZOOM = 12;
 const CLUSTER_RADIUS = 50;
+let isHeatmapMode = true;
+let cachedGeoData = null;
 // Color Constants
 const COLORS = {
     LIGHT_BLUE: '#4fc3f7',
@@ -66,7 +68,7 @@ function showImageModal(imageSrc) {
 
 const map = new mapboxgl.Map({
     container: 'map',
-    style: 'mapbox://styles/mapbox/satellite-streets-v12',
+    style: 'mapbox://styles/mapbox/dark-v11',
     center: [-89.6, 29.5],
     zoom: 6.5,
     pitch: 60,
@@ -113,73 +115,12 @@ async function loadAndFilterGeoData() {
 }
 
 function createMapLayers(data) {
-    map.addSource('geojson-data', {
-        type: 'geojson',
-        data: data,
-        cluster: true,
-        clusterMaxZoom: CLUSTER_MAX_ZOOM,
-        clusterRadius: CLUSTER_RADIUS
-    });
-    
-    map.addLayer({
-        id: 'clusters',
-        type: 'circle',
-        source: 'geojson-data',
-        filter: ['has', 'point_count'],
-        paint: {
-            'circle-color': [
-                'step',
-                ['get', 'point_count'],
-                COLORS.LIGHT_BLUE,
-                100,
-                COLORS.YELLOW,
-                750,
-                COLORS.ORANGE_RED
-            ],
-            'circle-radius': [
-                'step',
-                ['get', 'point_count'],
-                20,
-                100,
-                30,
-                750,
-                40
-            ],
-            'circle-stroke-width': 2,
-            'circle-stroke-color': COLORS.WHITE
-        }
-    });
-
-    map.addLayer({
-        id: 'cluster-count',
-        type: 'symbol',
-        source: 'geojson-data',
-        filter: ['has', 'point_count'],
-        layout: {
-            'text-field': '{point_count_abbreviated}',
-            'text-font': ['DIN Offc Pro Medium', 'Arial Unicode MS Bold'],
-            'text-size': 12
-        },
-        paint: {
-            'text-color': COLORS.BLACK,
-            'text-halo-color': COLORS.WHITE,
-            'text-halo-width': 1
-        }
-    });
-
-    map.addLayer({
-        id: 'unclustered-point',
-        type: 'circle',
-        source: 'geojson-data',
-        filter: ['!', ['has', 'point_count']],
-        paint: {
-            'circle-color': COLORS.TEAL,
-            'circle-radius': 8,
-            'circle-stroke-width': 2,
-            'circle-stroke-color': COLORS.WHITE
-        }
-    });
-    
+    cachedGeoData = data;
+    if (isHeatmapMode) {
+        addHeatmapLayers(data);
+    } else {
+        addClusterLayers(data);
+    }
     console.log('Layers added successfully');
 }
 
@@ -391,7 +332,211 @@ function createSpeciesPopupContent(properties) {
     return popupContent;
 }
 
+function toggleMapMode() {
+    isHeatmapMode = !isHeatmapMode;
+    const toggleButton = document.getElementById('mapModeToggle');
+    const heatmapIcon = document.getElementById('heatmapIcon');
+    const clusterIcon = document.getElementById('clusterIcon');
+    
+    if (isHeatmapMode) {
+        map.setStyle('mapbox://styles/mapbox/dark-v11');
+        toggleButton.classList.add('heatmap-active');
+        toggleButton.title = 'Switch to cluster view';
+        heatmapIcon.style.display = 'none';
+        clusterIcon.style.display = 'block';
+        
+        map.once('style.load', () => {
+            if (cachedGeoData) {
+                addHeatmapLayers(cachedGeoData);
+            }
+        });
+    } else {
+        map.setStyle('mapbox://styles/mapbox/satellite-streets-v12');
+        toggleButton.classList.remove('heatmap-active');
+        toggleButton.title = 'Switch to heat map';
+        heatmapIcon.style.display = 'block';
+        clusterIcon.style.display = 'none';
+        
+        map.once('style.load', () => {
+            map.addSource('mapbox-dem', {
+                'type': 'raster-dem',
+                'url': 'mapbox://mapbox.mapbox-terrain-dem-v1',
+                'tileSize': 512,
+                'maxzoom': 14
+            });
+            
+            map.setTerrain({ 'source': 'mapbox-dem', 'exaggeration': 3 });
+            map.setFog({});
+            
+            if (cachedGeoData) {
+                addClusterLayers(cachedGeoData);
+            }
+        });
+    }
+}
+
+function addClusterLayers(data) {
+    map.addSource('geojson-data', {
+        type: 'geojson',
+        data: data,
+        cluster: true,
+        clusterMaxZoom: CLUSTER_MAX_ZOOM,
+        clusterRadius: CLUSTER_RADIUS
+    });
+    
+    map.addLayer({
+        id: 'clusters',
+        type: 'circle',
+        source: 'geojson-data',
+        filter: ['has', 'point_count'],
+        paint: {
+            'circle-color': [
+                'step',
+                ['get', 'point_count'],
+                COLORS.LIGHT_BLUE,
+                100,
+                COLORS.YELLOW,
+                750,
+                COLORS.ORANGE_RED
+            ],
+            'circle-radius': [
+                'step',
+                ['get', 'point_count'],
+                20,
+                100,
+                30,
+                750,
+                40
+            ],
+            'circle-stroke-width': 2,
+            'circle-stroke-color': COLORS.WHITE
+        }
+    });
+
+    map.addLayer({
+        id: 'cluster-count',
+        type: 'symbol',
+        source: 'geojson-data',
+        filter: ['has', 'point_count'],
+        layout: {
+            'text-field': '{point_count_abbreviated}',
+            'text-font': ['DIN Offc Pro Medium', 'Arial Unicode MS Bold'],
+            'text-size': 12
+        },
+        paint: {
+            'text-color': COLORS.BLACK,
+            'text-halo-color': COLORS.WHITE,
+            'text-halo-width': 1
+        }
+    });
+
+    map.addLayer({
+        id: 'unclustered-point',
+        type: 'circle',
+        source: 'geojson-data',
+        filter: ['!', ['has', 'point_count']],
+        paint: {
+            'circle-color': COLORS.TEAL,
+            'circle-radius': 8,
+            'circle-stroke-width': 2,
+            'circle-stroke-color': COLORS.WHITE
+        }
+    });
+}
+
+function addHeatmapLayers(data) {
+    map.addSource('heatmap-data', {
+        type: 'geojson',
+        data: data
+    });
+    
+    map.addLayer({
+        id: 'heatmap-layer',
+        type: 'heatmap',
+        source: 'heatmap-data',
+        maxzoom: 15,
+        paint: {
+            'heatmap-weight': 0.4,
+            'heatmap-intensity': [
+                'interpolate',
+                ['linear'],
+                ['zoom'],
+                0, 0.4,
+                15, 1.2
+            ],
+            'heatmap-color': [
+                'interpolate',
+                ['linear'],
+                ['heatmap-density'],
+                0, 'rgba(33,102,172,0)',
+                0.1, 'rgb(33,102,172)',
+                0.3, 'rgb(103,169,207)',
+                0.5, 'rgb(209,229,240)',
+                0.7, 'rgb(253,219,199)',
+                0.85, 'rgb(239,138,98)',
+                1, 'rgb(178,24,43)'
+            ],
+            'heatmap-radius': [
+                'interpolate',
+                ['linear'],
+                ['zoom'],
+                0, 3,
+                15, 15
+            ],
+            'heatmap-opacity': [
+                'interpolate',
+                ['linear'],
+                ['zoom'],
+                7, 0.75,
+                15, 0.5
+            ]
+        }
+    });
+    
+    map.addLayer({
+        id: 'heatmap-point',
+        type: 'circle',
+        source: 'heatmap-data',
+        minzoom: 14,
+        paint: {
+            'circle-radius': [
+                'interpolate',
+                ['linear'],
+                ['zoom'],
+                14, 4,
+                16, 8
+            ],
+            'circle-color': '#ff5722',
+            'circle-stroke-color': 'white',
+            'circle-stroke-width': 1,
+            'circle-opacity': [
+                'interpolate',
+                ['linear'],
+                ['zoom'],
+                14, 0,
+                15, 0.7
+            ]
+        }
+    });
+}
+
 function setupEventHandlers() {
+    const toggleButton = document.getElementById('mapModeToggle');
+    const heatmapIcon = document.getElementById('heatmapIcon');
+    const clusterIcon = document.getElementById('clusterIcon');
+    
+    if (isHeatmapMode) {
+        toggleButton.classList.add('heatmap-active');
+        toggleButton.title = 'Switch to cluster view';
+        heatmapIcon.style.display = 'none';
+        clusterIcon.style.display = 'block';
+    } else {
+        heatmapIcon.style.display = 'block';
+        clusterIcon.style.display = 'none';
+    }
+    
+    toggleButton.addEventListener('click', toggleMapMode);
+    
     map.on('mouseenter', 'clusters', () => {
         map.getCanvas().style.cursor = 'pointer';
     });
@@ -405,6 +550,14 @@ function setupEventHandlers() {
     });
     
     map.on('mouseleave', 'unclustered-point', () => {
+        map.getCanvas().style.cursor = '';
+    });
+    
+    map.on('mouseenter', 'heatmap-point', () => {
+        map.getCanvas().style.cursor = 'pointer';
+    });
+    
+    map.on('mouseleave', 'heatmap-point', () => {
         map.getCanvas().style.cursor = '';
     });
     
@@ -433,6 +586,22 @@ function setupEventHandlers() {
         
         console.log('species_colonies type:', typeof properties.species_colonies);
         console.log('species_colonies value:', properties.species_colonies);
+        
+        const popupContent = createSpeciesPopupContent(properties);
+        
+        new mapboxgl.Popup({ className: 'species-popup-container' })
+            .setLngLat(e.lngLat)
+            .setHTML(popupContent)
+            .addTo(map);
+    });
+    
+    map.on('click', 'heatmap-point', (e) => {
+        if (!e.features || e.features.length === 0) {
+            return;
+        }
+        
+        const features = e.features[0];
+        const properties = features.properties;
         
         const popupContent = createSpeciesPopupContent(properties);
         
@@ -482,7 +651,7 @@ function setupRectangleSelection() {
     const selectionIndicator = document.createElement('div');
     selectionIndicator.innerHTML = 'Hold Shift + Drag to select area';
     selectionIndicator.style.position = 'absolute';
-    selectionIndicator.style.top = '10px';
+    selectionIndicator.style.bottom = '30px';
     selectionIndicator.style.left = '10px';
     selectionIndicator.style.background = COLORS.SEMI_WHITE;
     selectionIndicator.style.color = COLORS.DARK_GRAY;
@@ -595,16 +764,17 @@ function setupRectangleSelection() {
 map.on('load', async () => {
     console.log('Map has successfully loaded and is ready for custom GeoJSON data');
     
-    map.addSource('mapbox-dem', {
-        'type': 'raster-dem',
-        'url': 'mapbox://mapbox.mapbox-terrain-dem-v1',
-        'tileSize': 512,
-        'maxzoom': 14
-    });
-    
-    map.setTerrain({ 'source': 'mapbox-dem', 'exaggeration': 3 });
-    
-    map.setFog({});
+    if (!isHeatmapMode) {
+        map.addSource('mapbox-dem', {
+            'type': 'raster-dem',
+            'url': 'mapbox://mapbox.mapbox-terrain-dem-v1',
+            'tileSize': 512,
+            'maxzoom': 14
+        });
+        
+        map.setTerrain({ 'source': 'mapbox-dem', 'exaggeration': 3 });
+        map.setFog({});
+    }
     
     const canvas = map.getCanvasContainer();
     canvas.style.backgroundColor = '#1a1a2e';
