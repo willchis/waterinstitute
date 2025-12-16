@@ -39,12 +39,44 @@ function loadThumbnail(thumbnailId) {
     }
 }
 
+function showImageModal(imageSrc) {
+    if (!imageSrc || imageSrc.includes('data:image/svg')) return;
+    
+    const overlay = document.createElement('div');
+    overlay.className = 'image-modal-overlay';
+    
+    const img = document.createElement('img');
+    img.src = imageSrc;
+    img.alt = 'Enlarged view';
+    
+    overlay.appendChild(img);
+    document.body.appendChild(overlay);
+    
+    overlay.addEventListener('click', () => {
+        overlay.remove();
+    });
+    
+    document.addEventListener('keydown', function closeOnEscape(e) {
+        if (e.key === 'Escape') {
+            overlay.remove();
+            document.removeEventListener('keydown', closeOnEscape);
+        }
+    });
+}
+
 const map = new mapboxgl.Map({
     container: 'map',
-    style: 'mapbox://styles/mapbox/dark-v11',
-    center: [-89.6, 29.5], // New Orleans coast area
-    zoom: 6.5
+    style: 'mapbox://styles/mapbox/satellite-streets-v12',
+    center: [-89.6, 29.5],
+    zoom: 6.5,
+    pitch: 60,
+    bearing: -17.6,
+    antialias: true
 });
+
+map.addControl(new mapboxgl.NavigationControl({
+    visualizePitch: true
+}));
 
 
 async function loadAndFilterGeoData() {
@@ -171,7 +203,11 @@ function fitMapToBounds(data) {
     });
     
     if (!bounds.isEmpty()) {
-        map.fitBounds(bounds, { padding: 50 });
+        map.fitBounds(bounds, { 
+            padding: 50,
+            pitch: 60,
+            bearing: -17.6
+        });
         console.log('Map fitted to data bounds:', bounds.toArray());
     } else {
         console.log('Bounds are empty, keeping current view');
@@ -324,6 +360,7 @@ function createSpeciesPopupContent(properties) {
     
     speciesColonies.forEach((species, index) => {
         const thumbnailId = `thumbnail-${Date.now()}-${index}`;
+        const thumbnailSrc = species.bird_info?.bird_thumbnail || '';
         popupContent += `
             <div class="species-item">
                 <div class="species-info">
@@ -336,8 +373,9 @@ function createSpeciesPopupContent(properties) {
                          alt="Loading..." 
                          width="60" 
                          height="40"
-                             style="background: ${COLORS.VERY_LIGHT_GRAY}; border-radius: 4px;"
-                         data-src="${species.bird_info?.bird_thumbnail || ''}"
+                            style="background: ${COLORS.VERY_LIGHT_GRAY}; border-radius: 4px;"
+                         data-src="${thumbnailSrc}"
+                         onclick="showImageModal('${thumbnailSrc}')"
                          onload="loadThumbnail('${thumbnailId}')" />
                 </div>
             </div>
@@ -554,9 +592,22 @@ function setupRectangleSelection() {
     });
 }
 
-// Add GeoJSON data when map loads
 map.on('load', async () => {
     console.log('Map has successfully loaded and is ready for custom GeoJSON data');
+    
+    map.addSource('mapbox-dem', {
+        'type': 'raster-dem',
+        'url': 'mapbox://mapbox.mapbox-terrain-dem-v1',
+        'tileSize': 512,
+        'maxzoom': 14
+    });
+    
+    map.setTerrain({ 'source': 'mapbox-dem', 'exaggeration': 3 });
+    
+    map.setFog({});
+    
+    const canvas = map.getCanvasContainer();
+    canvas.style.backgroundColor = '#1a1a2e';
     
     try {
         const filteredData = await loadAndFilterGeoData();
@@ -758,6 +809,7 @@ function showSpeciesSummary(speciesCounts, totalPoints, bounds, allSpecies) {
                                  width="40" 
                                  height="30"
                                  data-src="${species.thumbnail}"
+                                 onclick="showImageModal('${species.thumbnail}')"
                                  onload="loadThumbnail('${thumbnailId}')" />
                         </div>
                     ` : ''}
